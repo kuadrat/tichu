@@ -13,8 +13,11 @@ several cards. These are:
 
 These combinations are implemeneted in this submodule.
 """
+import logging
 
 from kustom.cards.deck import Card, tichu_deck
+
+logger = logging.getLogger('tichu.' + __name__)
 
 # Define some special cards for comparisons
 Dog = Card(rank=0, suit='Special', name='Dog', shortname='Dog')
@@ -23,6 +26,14 @@ Phoenix = Card(rank=14.5, suit='Special', name='Phoenix')
 Dragon = Card(rank=15, suit='Special', name='Dragon', shortname='Dragon')
 
 class Combination() :
+    """
+    ============  ==============================================================
+    combo_type    str; one of ['single', 'pair', 'triplet', 'straight', 
+                  'full_house', 'straight_of_pairs', 'bomb', 'straight_bomb'];
+                  the type of this combination.
+    with_phoenix  boolean; *True* if the phoenix appears in this combination.
+    ============  ==============================================================
+    """
 
     # The names of the possible combinations here must match the respective 
     # methods `is_xxx`!
@@ -30,6 +41,10 @@ class Combination() :
                     'straight_of_pairs', 'bomb', 'straight_bomb']
 
     with_phoenix = False
+
+    # How much to increase the ranks of bombs
+    bomb_offset = 100
+    straight_bomb_offset = 1000
 
     def __init__(self, cards) :
         """ 
@@ -54,9 +69,12 @@ class Combination() :
         return (card for card in self.cards)
 
     def __str__(self) :
-        res = '<Combination> {}: '.format(self.combo_type)
+        res = '<Combination {}: '.format(self.combo_type)
         for card in self.cards :
             res += '{}, '.format(card)
+        # Strip last comma and close '>'
+        res = res[:-2]
+        res += '>'
         return res
 
     def __repr__(self) :
@@ -131,24 +149,26 @@ class Combination() :
         # Dogs and Dragons may not appear in a straight
         if Dog in self or Dragon in self : return False
 
-        res = self.is_subsequent_list(self.ranks, self.with_phoenix)
+        res = self.is_subsequent_list(self.ranks)
         if res :
+            # TODO Account for the phoenix' rank correctly
             self.rank = min(self.ranks)
         return res
 
-    def is_subsequent_list(self, my_list, with_phoenix=False) :
+    def is_subsequent_list(self, my_list) :
         """ Check whether *my_list* contains only subsequent values (or 
         maximally 1 step of 2, if *with_phoenix* is True.
         """
+        have_phoenix = self.with_phoenix
         # Sort the ranks and verify that they are subsequent
         ordered = sorted(my_list)
         for i in range(len(ordered) - 1) :
             delta = ordered[i+1] - ordered[i]
             if delta == 1 :
                 continue
-            elif delta == 2 and with_phoenix :
+            elif delta == 2 and have_phoenix :
                 # "Use" the phoenix
-                with_phoenix = False
+                have_phoenix = False
             else :
                 return False
 
@@ -205,7 +225,7 @@ class Combination() :
             if not counts == set([2]) : return False
 
         # Check if the cards are subsequent
-        res = self.is_subsequent_list(list(rank_set), self.with_phoenix)
+        res = self.is_subsequent_list(list(rank_set))
         if res :
             self.rank = min(rank_set)
         return res
@@ -217,7 +237,13 @@ class Combination() :
         # No phoenix
         if Phoenix in self : return False
 
-        return self.have_equal_ranks()
+        # Are all 4 cards of the same kind?
+        if not self.have_equal_ranks() : return False
+
+        # By this point we know that we have a bomb. Add an offset to the 
+        # rank to make the bomb beat all regular combinations.
+        self.rank = self.bomb_offset + self.ranks[0]
+        return True
 
     def have_equal_ranks(self) :
         """ Returns True if all *self.cards* have the same rank. """
@@ -231,8 +257,12 @@ class Combination() :
     def is_straight_bomb(self) :
         """ Min. 5 subsequent cards of the same suit. """
         if not self.are_subsequent_singles() : return False
-        if self.are_same_suit() : return True
-        return False
+        if not self.are_same_suit() : return False
+        # By now we know we have a straight bomb with the rank of a straight 
+        # of that length. Increase its rank to make it beat other bombs and 
+        # shorter straight bombs.
+        self.rank += len(self.cards) * self.straight_bomb_offset
+        return True
 
 # Testing
 if __name__ == '__main__' :

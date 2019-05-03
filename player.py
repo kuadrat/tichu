@@ -1,11 +1,20 @@
 
-import watchdog
+import logging
+#import watchdog
 
 from combination import Combination
 from kustom.cards import deck
 
+logger = logging.getLogger('tichu.' + __name__)
+
 class PlayerAction() :
-    pass
+    name = 'generic PlayerAction'
+
+    def __str__(self) :
+        return '<PlayerAction {}>'.format(self.name)
+
+    def __repr__(self) :
+        return self.__str__()
 
 class PassAction(PlayerAction) :
     name = 'pass'
@@ -50,7 +59,7 @@ class Player() :
         =====  =================================================================
         """
         if self.play_lock :
-            print(self.name, ' cannot play now.')
+            logger.info('%s cannot play now, has play_lock.', self.name)
             return
 
         combination = self.hand.play(cards)
